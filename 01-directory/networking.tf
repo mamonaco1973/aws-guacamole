@@ -59,16 +59,33 @@ resource "aws_subnet" "vm-subnet-1" {
 # ------------------------------------------------------------------------------
 # RESOURCE: aws_subnet.vm-subnet-2
 # ------------------------------------------------------------------------------
-# Optional second public subnet for HA / additional utility hosts.
+# Second public subnet, in another Availability Zone: an Application Load
+# Balancer must span at least two. Only the ALB lives in the public subnets.
 # ------------------------------------------------------------------------------
-# resource "aws_subnet" "vm-subnet-2" {
-#   vpc_id                  = aws_vpc.ad-vpc.id
-#   cidr_block              = "10.0.0.128/26"
-#   map_public_ip_on_launch = true
-#   availability_zone_id    = "use1-az4"
-#
-#   tags = { Name = "vm-subnet-2" }
-# }
+resource "aws_subnet" "vm-subnet-2" {
+  vpc_id                  = aws_vpc.ad-vpc.id
+  cidr_block              = "10.0.0.128/26"
+  map_public_ip_on_launch = true
+  availability_zone_id    = "use1-az4"
+
+  tags = { Name = "vm-subnet-2" }
+}
+
+# ------------------------------------------------------------------------------
+# RESOURCE: aws_subnet.server-subnet
+# ------------------------------------------------------------------------------
+# Private subnet for the Guacamole, Linux and Windows servers. No public IPs;
+# outbound internet goes through the NAT gateway, inbound only from inside
+# the VPC (the ALB reaches Guacamole, Guacamole reaches the others).
+# ------------------------------------------------------------------------------
+resource "aws_subnet" "server-subnet" {
+  vpc_id                  = aws_vpc.ad-vpc.id
+  cidr_block              = "10.0.0.192/26"
+  map_public_ip_on_launch = false
+  availability_zone_id    = "use1-az6"
+
+  tags = { Name = "server-subnet" }
+}
 
 # ------------------------------------------------------------------------------
 # RESOURCE: aws_subnet.ad-subnet
@@ -195,5 +212,21 @@ resource "aws_route_table_association" "rt_assoc_vm_public" {
 # ------------------------------------------------------------------------------
 resource "aws_route_table_association" "rt_assoc_ad_private" {
   subnet_id      = aws_subnet.ad-subnet.id
+  route_table_id = aws_route_table.private.id
+}
+
+# ------------------------------------------------------------------------------
+# RESOURCE: aws_route_table_association.rt_assoc_vm2_public
+# ------------------------------------------------------------------------------
+resource "aws_route_table_association" "rt_assoc_vm2_public" {
+  subnet_id      = aws_subnet.vm-subnet-2.id
+  route_table_id = aws_route_table.public.id
+}
+
+# ------------------------------------------------------------------------------
+# RESOURCE: aws_route_table_association.rt_assoc_server_private
+# ------------------------------------------------------------------------------
+resource "aws_route_table_association" "rt_assoc_server_private" {
+  subnet_id      = aws_subnet.server-subnet.id
   route_table_id = aws_route_table.private.id
 }

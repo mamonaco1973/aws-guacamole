@@ -81,3 +81,21 @@ variable "dc_hostname" {
   type        = string
   default     = "ad1"
 }
+
+# ================================================================================
+# Guacamole Inputs
+# ================================================================================
+
+# ------------------------------------------------------------------------------
+# VARIABLE: allowed_cidrs
+# ------------------------------------------------------------------------------
+# Purpose:
+#   - Who may reach the Guacamole ALB. Open by default; every login still
+#     needs an AD account in mcloud-users. Narrow it to your own address
+#     with, e.g., TF_VAR_allowed_cidrs='["203.0.113.7/32"]'.
+# ------------------------------------------------------------------------------
+variable "allowed_cidrs" {
+  description = "CIDR blocks allowed to reach the Guacamole ALB"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

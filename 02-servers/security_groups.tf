@@ -1,55 +1,39 @@
 # ================================================================================
-# SECURITY GROUPS: Lab Access Rules (RDP / SSH / SMB / ICMP)
+# SECURITY GROUPS
 # ================================================================================
-# Purpose:
-#   - Provides connectivity to lab instances for administration and testing.
-#   - RDP is used for Windows instance access.
-#   - SSH is used for Linux instance access.
-#   - SMB/445 is included for AD/Samba testing scenarios.
-#   - ICMP is enabled for basic reachability checks.
+# The only internet-facing piece is the ALB:
 #
-# Notes:
-#   - Ingress is currently open to 0.0.0.0/0 for demo purposes.
-#   - Production deployments must restrict ingress to trusted CIDRs or
-#     security-group sources.
+#   internet --443/80--> alb_sg --8080--> guacamole_sg --3389--> windows_sg
+#                                                      \--22----> linux_sg
+#
+# Every server is in the private subnet with no public IP. ICMP is allowed
+# from inside the VPC for reachability checks.
 # ================================================================================
 
-# ================================================================================
-# RESOURCE: aws_security_group.ad_rdp_sg
-# ================================================================================
-# Purpose:
-#   - Allows Remote Desktop (TCP/3389) access to Windows instances.
-# ================================================================================
-resource "aws_security_group" "ad_rdp_sg" {
-  name        = "efs-rdp-security-group"
-  description = "Allow RDP access from the internet"
+# ------------------------------------------------------------------------------
+# ALB: HTTPS (and HTTP, redirected) from var.allowed_cidrs
+# ------------------------------------------------------------------------------
+resource "aws_security_group" "alb_sg" {
+  name        = "guacamole-alb-sg"
+  description = "Guacamole ALB: HTTPS and HTTP redirect"
   vpc_id      = data.aws_vpc.ad_vpc.id
 
-  # ------------------------------------------------------------------------------
-  # INGRESS: RDP (TCP/3389)
-  # ------------------------------------------------------------------------------
   ingress {
-    description = "Allow RDP from anywhere (demo only)"
-    from_port   = 3389
-    to_port     = 3389
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.allowed_cidrs
   }
 
-  # ------------------------------------------------------------------------------
-  # INGRESS: ICMP (Ping)
-  # ------------------------------------------------------------------------------
   ingress {
-    description = "Allow ICMP from anywhere (demo only)"
-    from_port   = -1
-    to_port     = -1
-    protocol    = "icmp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTP (redirected to HTTPS)"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = var.allowed_cidrs
   }
 
-  # ------------------------------------------------------------------------------
-  # EGRESS: ALL
-  # ------------------------------------------------------------------------------
   egress {
     from_port   = 0
     to_port     = 0
@@ -58,66 +42,94 @@ resource "aws_security_group" "ad_rdp_sg" {
   }
 }
 
-# ================================================================================
-# RESOURCE: aws_security_group.ad_ssh_sg
-# ================================================================================
-# Purpose:
-#   - Allows SSH (TCP/22) access to Linux instances.
-#   - Allows SMB (TCP/445) for AD/Samba testing scenarios.
-# ================================================================================
-resource "aws_security_group" "ad_ssh_sg" {
-  name        = "efs-ssh-security-group"
-  description = "Allow SSH access from the internet"
+# ------------------------------------------------------------------------------
+# Guacamole: the web app on 8080, from the ALB only
+# ------------------------------------------------------------------------------
+resource "aws_security_group" "guacamole_sg" {
+  name        = "guacamole-server-sg"
+  description = "Guacamole web app, reachable only from the ALB"
   vpc_id      = data.aws_vpc.ad_vpc.id
 
-  # ------------------------------------------------------------------------------
-  # INGRESS: SSH (TCP/22)
-  # ------------------------------------------------------------------------------
   ingress {
-    description = "Allow SSH from anywhere (demo only)"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = "Guacamole (Tomcat) from the ALB"
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
   }
 
-  # ------------------------------------------------------------------------------
-  # INGRESS: SMB (TCP/445)
-  # ------------------------------------------------------------------------------
   ingress {
-    description = "Allow SMB from anywhere (demo only)"
-    from_port   = 445
-    to_port     = 445
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # ------------------------------------------------------------------------------
-  # INGRESS: shellinabox web terminal (TCP/80)
-  # ------------------------------------------------------------------------------
-  # Browse to http://<instance> for a login prompt (HTTP, no TLS — lab only).
-  ingress {
-    description = "Allow shellinabox web terminal from anywhere (demo only)"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # ------------------------------------------------------------------------------
-  # INGRESS: ICMP (Ping)
-  # ------------------------------------------------------------------------------
-  ingress {
-    description = "Allow ICMP from anywhere (demo only)"
+    description = "ICMP from the VPC"
     from_port   = -1
     to_port     = -1
     protocol    = "icmp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [data.aws_vpc.ad_vpc.cidr_block]
   }
 
-  # ------------------------------------------------------------------------------
-  # EGRESS: ALL
-  # ------------------------------------------------------------------------------
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# ------------------------------------------------------------------------------
+# Windows: RDP from Guacamole only
+# ------------------------------------------------------------------------------
+resource "aws_security_group" "windows_sg" {
+  name        = "guacamole-windows-sg"
+  description = "RDP from the Guacamole server only"
+  vpc_id      = data.aws_vpc.ad_vpc.id
+
+  ingress {
+    description     = "RDP from Guacamole"
+    from_port       = 3389
+    to_port         = 3389
+    protocol        = "tcp"
+    security_groups = [aws_security_group.guacamole_sg.id]
+  }
+
+  ingress {
+    description = "ICMP from the VPC"
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = [data.aws_vpc.ad_vpc.cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# ------------------------------------------------------------------------------
+# Linux: SSH from Guacamole only
+# ------------------------------------------------------------------------------
+resource "aws_security_group" "linux_sg" {
+  name        = "guacamole-linux-sg"
+  description = "SSH from the Guacamole server only"
+  vpc_id      = data.aws_vpc.ad_vpc.id
+
+  ingress {
+    description     = "SSH from Guacamole"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.guacamole_sg.id]
+  }
+
+  ingress {
+    description = "ICMP from the VPC"
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = [data.aws_vpc.ad_vpc.cidr_block]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0

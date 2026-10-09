@@ -11,7 +11,8 @@
 #
 # Notes:
 #   - This instance is NOT a domain controller.
-#   - If a public IP is assigned, restrict RDP ingress to trusted CIDRs.
+#   - Private: no public IP. Users reach it through Guacamole's RDP
+#     connection; RDP is open only to the Guacamole server.
 # ================================================================================
 
 # ================================================================================
@@ -38,16 +39,13 @@ resource "aws_instance" "windows_ad_instance" {
   # ------------------------------------------------------------------------------
   # Networking
   # ------------------------------------------------------------------------------
-  subnet_id = data.aws_subnet.vm_subnet_1.id
+  subnet_id = data.aws_subnet.server_subnet.id
 
   vpc_security_group_ids = [
-    aws_security_group.ad_rdp_sg.id
+    aws_security_group.windows_sg.id
   ]
 
-  # Notes:
-  #   - Assigning a public IP can expose RDP if security groups are open.
-  #   - Prefer VPN, SSM Session Manager, or restricted admin CIDRs.
-  associate_public_ip_address = true
+  associate_public_ip_address = false
 
   # ------------------------------------------------------------------------------
   # IAM Instance Profile

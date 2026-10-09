@@ -73,6 +73,36 @@ data "aws_subnet" "vm_subnet_1" {
 }
 
 # ------------------------------------------------------------------------------
+# DATA: aws_subnet.vm_subnet_2 (second public subnet, for the ALB)
+# ------------------------------------------------------------------------------
+data "aws_subnet" "vm_subnet_2" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.ad_vpc.id]
+  }
+
+  filter {
+    name   = "tag:Name"
+    values = ["vm-subnet-2"]
+  }
+}
+
+# ------------------------------------------------------------------------------
+# DATA: aws_subnet.server_subnet (private; Guacamole, Linux, Windows)
+# ------------------------------------------------------------------------------
+data "aws_subnet" "server_subnet" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.ad_vpc.id]
+  }
+
+  filter {
+    name   = "tag:Name"
+    values = ["server-subnet"]
+  }
+}
+
+# ------------------------------------------------------------------------------
 # DATA: aws_subnet.ad_subnet
 # ------------------------------------------------------------------------------
 data "aws_subnet" "ad_subnet" {
