@@ -115,8 +115,8 @@ NODES.update({
                  "AD credentials"),
     "windows":  (COL[0], ROW[2], "blue", "monitor", "Windows Server 2022",
                  "private, RDP from Guacamole only"),
-    "linux":    (COL[2], ROW[2], "blue", "terminal", "Ubuntu 24.04",
-                 "private, SSH from Guacamole only"),
+    "linux":    (COL[2], ROW[2], "blue", "monitor", "Xubuntu 26.04",
+                 "Packer AMI: Xfce + XRDP, private"),
     "dc":       (COL[1], ROW[3], "purple", "users", "mini-AD (Samba DC)",
                  "users, groups, LDAPS, Kerberos, DNS"),
 })
@@ -143,7 +143,7 @@ EDGES = {
     "e_rdp":   (f"M{g[4] - FAN},{g[3]} V{win[5]} H{win[2] + 5}", "local",
                 "RDP :3389", (g[4] - FAN + win[2]) / 2, win[5] - 12, "middle"),
     "e_ssh":   (f"M{g[4] + FAN},{g[3]} V{lin[5]} H{lin[0] - 5}", "local",
-                "SSH :22", (g[4] + FAN + lin[0]) / 2, lin[5] - 12, "middle"),
+                "RDP :3389 + SSH :22", (g[4] + FAN + lin[0]) / 2, lin[5] - 12, "middle"),
     "e_ldaps": (f"M{g[4]},{g[3]} V{dc[1] - 5}", "purple",
                 "LDAPS :636 sign-in", g[4] + 14, dc[1] - 30, "start"),
     "e_winad": (f"M{win[4]},{win[3]} V{MID3} H{dc[0] - 5}", "purple",
@@ -156,7 +156,8 @@ ALT = ("A browser reaches an internet-facing load balancer over HTTPS; it forwar
        "to a private Guacamole server, which signs users in against the mini-AD "
        "domain controller over LDAPS, keeps its connections in PostgreSQL, reads "
        "its LDAP bind password from Secrets Manager, and opens RDP to a private "
-       "Windows host and SSH to a private Linux host, both joined to the domain. "
+       "Windows host, and RDP and SSH to a private Xubuntu desktop host built "
+       "from a Packer AMI, both joined to the domain. "
        "The private servers reach the internet through a NAT gateway.")
 
 # ------------------------------------------------------------------------------

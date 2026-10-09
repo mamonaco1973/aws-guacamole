@@ -3,8 +3,8 @@
 #
 # Purpose:
 #   - The Apache Guacamole server: private, behind the ALB (alb.tf). It signs
-#     users in against the mini-AD and opens RDP to the Windows host and SSH
-#     to the Linux host on their behalf. Setup is in
+#     users in against the mini-AD and opens RDP to the Windows host, and RDP
+#     (XRDP) and SSH to the Xubuntu host, on their behalf. Setup is in
 #     scripts/userdata_guacamole.sh.
 # ================================================================================
 
@@ -36,7 +36,7 @@ resource "aws_instance" "guacamole" {
     base_dn      = local.base_dn
     netbios      = var.netbios
     windows_ip   = aws_instance.windows_ad_instance.private_ip
-    linux_ip     = aws_instance.linux.private_ip
+    xubuntu_ip   = aws_instance.xubuntu.private_ip
   })
 
   # Replace the server if the setup script changes, instead of leaving the

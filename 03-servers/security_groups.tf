@@ -3,8 +3,8 @@
 # ================================================================================
 # The only internet-facing piece is the ALB:
 #
-#   internet --443/80--> alb_sg --8080--> guacamole_sg --3389--> windows_sg
-#                                                      \--22----> linux_sg
+#   internet --443/80--> alb_sg --8080--> guacamole_sg --3389------> windows_sg
+#                                                      \--22, 3389--> xubuntu_sg
 #
 # Every server is in the private subnet with no public IP. ICMP is allowed
 # from inside the VPC for reachability checks.
@@ -107,17 +107,25 @@ resource "aws_security_group" "windows_sg" {
 }
 
 # ------------------------------------------------------------------------------
-# Linux: SSH from Guacamole only
+# Xubuntu: SSH and RDP (XRDP) from Guacamole only
 # ------------------------------------------------------------------------------
-resource "aws_security_group" "linux_sg" {
-  name        = "guacamole-linux-sg"
-  description = "SSH from the Guacamole server only"
+resource "aws_security_group" "xubuntu_sg" {
+  name        = "guacamole-xubuntu-sg"
+  description = "SSH and RDP from the Guacamole server only"
   vpc_id      = data.aws_vpc.ad_vpc.id
 
   ingress {
     description     = "SSH from Guacamole"
     from_port       = 22
     to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.guacamole_sg.id]
+  }
+
+  ingress {
+    description     = "RDP (XRDP) from Guacamole"
+    from_port       = 3389
+    to_port         = 3389
     protocol        = "tcp"
     security_groups = [aws_security_group.guacamole_sg.id]
   }

@@ -3,8 +3,8 @@
 A browser-only gateway into a **private** Windows and Linux environment.
 **Apache Guacamole** sits behind an Application Load Balancer. Users sign in
 with their Active Directory account, then open an RDP session to a Windows
-host or an SSH session to a Linux host, all in the browser and all as
-themselves. No server has a public IP, and there's no VPN or SSH key to hand
+host, or an Xfce desktop (over XRDP) or an SSH session on an Xubuntu host,
+all in the browser and all as themselves. No server has a public IP, and there's no VPN or SSH key to hand
 out.
 
 | Piece | Where | Role |
@@ -12,7 +12,7 @@ out.
 | **ALB** | public subnets (2 AZs) | HTTPS with a self-signed certificate; HTTP redirects to HTTPS. The only internet-facing piece. |
 | **Guacamole** | private subnet | guacd + the Guacamole web app + PostgreSQL, in Docker |
 | **Windows Server 2022** | private subnet | joined to AD; RDP from Guacamole only |
-| **Ubuntu 24.04** | private subnet | joined to AD with SSSD (AD provider); SSH from Guacamole only |
+| **Xubuntu 26.04** | private subnet | Packer-built AMI (Xubuntu core + XRDP); joined to AD with SSSD at boot; RDP and SSH from Guacamole only |
 | **mini-AD** (Samba DC) | private subnet | users, groups, DNS, Kerberos, LDAPS |
 | **NAT gateway** | public subnet | outbound internet for the private servers |
 
@@ -20,7 +20,7 @@ out.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="architecture-dark.svg">
-  <img alt="A browser reaches an internet-facing load balancer over HTTPS; it forwards to a private Guacamole server, which signs users in against the mini-AD domain controller over LDAPS, keeps its connections in PostgreSQL, reads its LDAP bind password from Secrets Manager, and opens RDP to a private Windows host and SSH to a private Linux host, both joined to the domain. The private servers reach the internet through a NAT gateway." src="architecture-light.svg">
+  <img alt="A browser reaches an internet-facing load balancer over HTTPS; it forwards to a private Guacamole server, which signs users in against the mini-AD domain controller over LDAPS, keeps its connections in PostgreSQL, reads its LDAP bind password from Secrets Manager, and opens RDP to a private Windows host, and RDP and SSH to a private Xubuntu desktop host built from a Packer AMI, both joined to the domain. The private servers reach the internet through a NAT gateway." src="architecture-light.svg">
 </picture>
 
 Regenerate with `python3 make_diagram.py`.
@@ -30,21 +30,28 @@ Regenerate with `python3 make_diagram.py`.
   [`module-aws-mini-ad`](https://github.com/mamonaco1973/module-aws-mini-ad)
   Samba DC with users and POSIX attributes from `users.json`. DHCP points VPC
   DNS at the DC.
-- **`02-servers/`**: the ALB and its certificate, the Guacamole server, the
-  Linux and Windows hosts, and their security groups.
+- **`02-packer/`**: builds the Xubuntu AMI from Canonical's Ubuntu 26.04
+  image: `xubuntu-core` (Xfce), XRDP with an Xfce session, the SSSD and
+  realmd packages, and the AWS CLI. The domain join is left to boot time,
+  because a computer account and keytab can't be baked into a shared image.
+- **`03-servers/`**: the ALB and its certificate, the Guacamole server, the
+  Xubuntu and Windows hosts, and their security groups.
 
 ## How sign-in works
 
 1. The user browses to the ALB and signs in to Guacamole as an AD user
    (`jsmith`). Guacamole checks the password against AD over **LDAPS**. Only
    members of **`mcloud-users`** are allowed in.
-2. Guacamole's PostgreSQL database holds two connections, **Windows (RDP)**
-   and **Linux (SSH)**. They're granted to a database group named
+2. Guacamole's PostgreSQL database holds three connections: **Windows
+   (RDP)**, **Xubuntu (RDP)** and **Xubuntu (SSH)**. They're granted to a database group named
    `mcloud-users`, and Guacamole applies that group to anyone who belongs to
    the AD group of the same name.
-3. Both connections use Guacamole's `${GUAC_USERNAME}` / `${GUAC_PASSWORD}`
+3. All three use Guacamole's `${GUAC_USERNAME}` / `${GUAC_PASSWORD}`
    tokens, so each session logs in to the target **as the signed-in user,
    with their AD password**. One sign-in reaches both machines.
+   - Windows RDP uses NLA with the `MCLOUD` domain.
+   - XRDP doesn't support NLA, so the Xubuntu RDP connection uses TLS
+     security and no domain; PAM and SSSD check the bare username against AD.
 4. Members of **`linux-admins`** (jsmith) also get Guacamole's administer
    right, so they can add connections in the UI. The built-in
    `guacadmin`/`guacadmin` account is disabled.
@@ -56,11 +63,11 @@ server fetches it at boot and puts it in a Java trust store for the web app.
 ## Security groups
 
 ```
-internet ─443/80─▶ ALB ─8080─▶ Guacamole ─3389─▶ Windows
-                                         └──22──▶ Linux
+internet ─443/80─▶ ALB ─8080─▶ Guacamole ─3389─────▶ Windows
+                                         └──22, 3389──▶ Xubuntu
 ```
 
-`allowed_cidrs` (in `02-servers/variables.tf`) controls who can reach the
+`allowed_cidrs` (in `03-servers/variables.tf`) controls who can reach the
 ALB. It defaults to `0.0.0.0/0`; every login still needs an AD account in
 `mcloud-users`. To limit it to your own address:
 
@@ -77,17 +84,21 @@ have the SSM instance role, and no public SSH or RDP exists.
 * [An AWS Account](https://aws.amazon.com/console/)
 * [Install AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 * [Install Terraform](https://developer.hashicorp.com/terraform/install)
+* [Install Packer](https://developer.hashicorp.com/packer/install)
 * [Install jq](https://jqlang.github.io/jq/download/) and `curl`
 
 ## Deploy
 
 ```bash
-./apply.sh       # phase 1: VPC + mini-AD, phase 2: ALB, Guacamole, Windows, Linux
+./apply.sh       # 1: VPC + mini-AD  2: Xubuntu AMI (Packer)  3: ALB, Guacamole, servers
 ./validate.sh    # waits for Guacamole, signs in as jsmith, prints the URL
 ```
 
-`validate.sh` signs in to Guacamole's API as `jsmith` and checks that both
-connections are granted. That exercises LDAPS, the group gate and the
+The Packer build takes about 15 minutes, and each run of `apply.sh` builds a
+fresh AMI. Phase 3 always uses the newest one.
+
+`validate.sh` signs in to Guacamole's API as `jsmith` and checks that all
+three connections are granted. That exercises LDAPS, the group gate and the
 database permissions. It ends with:
 
 ```
@@ -97,7 +108,8 @@ URL      : https://guacamole-alb-123456789.us-east-1.elb.amazonaws.com/
            Self-signed certificate: the browser warns once;
            choose Advanced > Proceed.
 Sign in  : jsmith / orange-481920
-Connect  : Windows (RDP) and Linux (SSH), as the signed-in user.
+Connect  : Windows (RDP), Xubuntu (RDP desktop) and Xubuntu (SSH),
+           as the signed-in user.
 ```
 
 The Windows host needs about **10 minutes** after deploy to join the domain
@@ -106,13 +118,14 @@ and reboot before RDP accepts domain logins.
 ## Try it
 
 1. Open the URL, accept the certificate warning, and sign in as `jsmith`.
-2. Click **Linux (SSH)**: a terminal opens, logged in as `jsmith`. Try
-   `id`, `getent group linux-admins`, and `sudo -l` (linux-admins have
-   passwordless sudo).
+2. Click **Xubuntu (RDP)**: an Xfce desktop opens as `jsmith`, whose home
+   directory is created on first login. **Xubuntu (SSH)** gives a terminal
+   on the same host. Try `id`, `getent group linux-admins`, and `sudo -l`
+   (linux-admins have passwordless sudo).
 3. Go back (Ctrl+Alt+Shift opens the Guacamole menu) and click **Windows
    (RDP)**: a desktop opens as `MCLOUD\jsmith`. **Active Directory Users and
    Computers** is installed.
-4. Sign out and sign in as `rpatel`: the same two connections, as rpatel.
+4. Sign out and sign in as `rpatel`: the same three connections, as rpatel.
    Not in `linux-admins`, so there's no admin menu and no sudo.
 
 User passwords are in Secrets Manager as `<user>_ad_credentials_efs`:
@@ -130,13 +143,16 @@ aws secretsmanager get-secret-value --secret-id rpatel_ad_credentials_efs \
 | Sign-in fails for everyone | LDAPS: on the Guacamole server, `cd /opt/guacamole && sudo docker compose logs guacamole`. Check `/opt/guacamole/tls/ca.pem` was fetched from the DC. |
 | One user can't sign in | They must be in AD group `mcloud-users`. |
 | Windows (RDP) disconnects at once | The host is still joining the domain and rebooting (about 10 minutes after deploy). |
-| Linux (SSH) rejects the password | The host hasn't finished its domain join; check `/root/userdata.log` over SSM. |
+| Xubuntu (SSH or RDP) rejects the password | The host hasn't finished its domain join; check `/root/userdata.log` over SSM. |
+| SSH prompt shows `start=...;type=shell;cwd=...` text | systemd 258+'s OSC 3008 prompt escapes, which Guacamole's terminal prints instead of hiding. The AMI diverts `/etc/profile.d/80-systemd-osc-context.sh` away (`02-packer/scripts/03-xrdp.sh`); on an older image, run `sudo dpkg-divert --local --rename --divert /etc/profile.d/80-systemd-osc-context.sh.disabled --add /etc/profile.d/80-systemd-osc-context.sh`. |
+| Xubuntu (RDP) connects, then closes | Check `/var/log/xrdp-sesman.log` on the host over SSM. The session runs `/etc/xrdp/startwm.sh`, which starts Xfce. |
+| Packer can't SSH to the build instance | The build runs in the public subnet and allows only your current public IP. Check that a VPN or proxy isn't changing it mid-build. |
 | Browser certificate warning | Expected: the certificate is self-signed. Import a real ACM certificate and point a DNS name at the ALB to remove it. |
 
 ## Teardown
 
 ```bash
-./destroy.sh     # destroys phase 2, deletes the demo secrets, destroys phase 1
+./destroy.sh     # destroys phase 3, deregisters the AMIs, deletes the secrets, destroys phase 1
 ```
 
 ## Notes

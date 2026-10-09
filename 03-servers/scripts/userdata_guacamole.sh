@@ -8,9 +8,9 @@
 #   Sign-in   LDAP against the mini-AD (LDAPS, port 636). Only members of
 #             mcloud-users may log in. The DC's own CA is fetched from
 #             http://<dc>/ca.pem and put in a Java trust store for that.
-#   Access    Two connections live in PostgreSQL: RDP to the Windows host and
-#             SSH to the Linux host. Both pass the user's own AD credentials
-#             through ($${GUAC_USERNAME} / $${GUAC_PASSWORD} tokens), so one
+#   Access    Three connections live in PostgreSQL: RDP to the Windows host,
+#             and RDP (XRDP, an Xfce desktop) and SSH to the Xubuntu host. All
+#             pass the user's own AD credentials through ($${GUAC_USERNAME} / $${GUAC_PASSWORD} tokens), so one
 #             sign-in reaches both. The database grants them to a group named
 #             mcloud-users, which Guacamole matches to the AD group.
 #   Admin     Members of linux-admins also get Guacamole's ADMINISTER right.
@@ -81,10 +81,11 @@ docker run --rm "guacamole/guacamole:$GUAC_VERSION" \
 # Quoted heredoc: the $${GUAC_...} tokens must reach the database literally;
 # Guacamole fills them in with the signed-in user's credentials.
 cat > "$GUAC_DIR/initdb/002-demo.sql" <<'SQL'
--- Two connections; each passes the signed-in user's AD credentials through.
+-- Three connections; each passes the signed-in user's AD credentials through.
 INSERT INTO guacamole_connection (connection_name, protocol) VALUES
   ('Windows (RDP)', 'rdp'),
-  ('Linux (SSH)',   'ssh');
+  ('Xubuntu (RDP)', 'rdp'),
+  ('Xubuntu (SSH)', 'ssh');
 
 INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
 SELECT c.connection_id, p.name, p.value
@@ -99,14 +100,28 @@ FROM guacamole_connection c,
              ('resize-method', 'display-update')) AS p(name, value)
 WHERE c.connection_name = 'Windows (RDP)';
 
+-- XRDP does not do NLA: TLS security, and no domain (PAM + SSSD checks the
+-- bare username against AD).
 INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
 SELECT c.connection_id, p.name, p.value
 FROM guacamole_connection c,
-     (VALUES ('hostname', '${linux_ip}'),
+     (VALUES ('hostname',    '${xubuntu_ip}'),
+             ('port',        '3389'),
+             ('username',    '$${GUAC_USERNAME}'),
+             ('password',    '$${GUAC_PASSWORD}'),
+             ('security',    'tls'),
+             ('ignore-cert', 'true'),
+             ('resize-method', 'display-update')) AS p(name, value)
+WHERE c.connection_name = 'Xubuntu (RDP)';
+
+INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
+SELECT c.connection_id, p.name, p.value
+FROM guacamole_connection c,
+     (VALUES ('hostname', '${xubuntu_ip}'),
              ('port',     '22'),
              ('username', '$${GUAC_USERNAME}'),
              ('password', '$${GUAC_PASSWORD}')) AS p(name, value)
-WHERE c.connection_name = 'Linux (SSH)';
+WHERE c.connection_name = 'Xubuntu (SSH)';
 
 -- Groups named like the AD groups: Guacamole applies a database group's
 -- permissions to LDAP users who are members of the AD group of that name.

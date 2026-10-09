@@ -6,7 +6,7 @@
 #     takes a few minutes after Terraform finishes).
 #   - Checks the HTTPS URL answers (self-signed certificate, so curl -k).
 #   - Signs in to Guacamole's API as jsmith -- LDAPS to AD, the mcloud-users
-#     group gate -- and checks both connections are granted.
+#     group gate -- and checks all three connections are granted.
 #   - Prints the URL and a login. One line per check, then a summary.
 # ==============================================================================
 set -euo pipefail
@@ -17,8 +17,8 @@ fail() { echo "FAILED"; echo "ERROR: $*" >&2; exit 1; }
 step() { printf '%-58s' "$1..."; }
 ok()   { echo "${1:-ok}"; }
 
-URL="$(terraform -chdir=02-servers output -raw guacamole_url 2>/dev/null || true)"
-GUAC_ID="$(terraform -chdir=02-servers output -raw guacamole_instance_id 2>/dev/null || true)"
+URL="$(terraform -chdir=03-servers output -raw guacamole_url 2>/dev/null || true)"
+GUAC_ID="$(terraform -chdir=03-servers output -raw guacamole_instance_id 2>/dev/null || true)"
 [ -n "${URL}" ] || fail "No guacamole_url output. Run ./apply.sh first."
 
 # ------------------------------------------------------------------------------
@@ -62,7 +62,7 @@ ok
 step "Connections granted to mcloud-users"
 CONNECTIONS="$(curl -sk --max-time 15 "${URL}api/session/data/postgresql/connections" \
   -H "Guacamole-Token: ${TOKEN}" | jq -r '[.[].name] | sort | join(", ")')"
-[ "${CONNECTIONS}" = "Linux (SSH), Windows (RDP)" ] || fail "Expected both connections, got '${CONNECTIONS}'."
+[ "${CONNECTIONS}" = "Windows (RDP), Xubuntu (RDP), Xubuntu (SSH)" ] || fail "Expected three connections, got '${CONNECTIONS}'."
 ok "${CONNECTIONS}"
 curl -sk -o /dev/null -X DELETE "${URL}api/session" -H "Guacamole-Token: ${TOKEN}" || true
 
@@ -79,7 +79,8 @@ URL      : ${URL}
 Sign in  : jsmith / ${JSMITH}
            (any mcloud-users member; passwords in Secrets Manager
            as <user>_ad_credentials_efs)
-Connect  : Windows (RDP) and Linux (SSH), as the signed-in user.
+Connect  : Windows (RDP), Xubuntu (RDP desktop) and Xubuntu (SSH),
+           as the signed-in user.
            Windows needs ~10 minutes after deploy to join the
            domain and reboot before RDP accepts domain logins.
 EOF
