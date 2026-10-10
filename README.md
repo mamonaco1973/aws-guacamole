@@ -52,9 +52,21 @@ Regenerate with `python3 make_diagram.py`.
    - Windows RDP uses NLA with the `MCLOUD` domain.
    - XRDP doesn't support NLA, so the Xubuntu RDP connection uses TLS
      security and no domain; PAM and SSSD check the bare username against AD.
-4. Members of **`linux-admins`** (jsmith) also get Guacamole's administer
-   right, so they can add connections in the UI. The built-in
+4. Members of **`linux-admins`** (jsmith and rpatel) also get Guacamole's
+   administer right, so they can add connections in the UI. The built-in
    `guacadmin`/`guacadmin` account is disabled.
+
+Who is an administrator where (from `01-directory/scripts/users.json.template`):
+
+| User | `linux-admins`: sudo on Xubuntu + Guacamole admin | `Domain Admins`: admin on Windows and in AD |
+|---|---|---|
+| jsmith | yes | yes |
+| rpatel | yes | yes |
+| edavis | no | no |
+| akumar | no | no |
+
+All four are in `mcloud-users`, so all four can sign in to Guacamole and
+use all three connections.
 
 For LDAPS, Guacamole must trust the DC's certificate. The Samba DC creates
 its own CA and serves it at `http://ad1.<domain>/ca.pem`. The Guacamole
@@ -124,14 +136,17 @@ and reboot before RDP accepts domain logins.
    (linux-admins have passwordless sudo).
 3. Go back (Ctrl+Alt+Shift opens the Guacamole menu) and click **Windows
    (RDP)**: a desktop opens as `MCLOUD\jsmith`. **Active Directory Users and
-   Computers** is installed.
-4. Sign out and sign in as `rpatel`: the same three connections, as rpatel.
-   Not in `linux-admins`, so there's no admin menu and no sudo.
+   Computers** is installed, and jsmith is a local administrator through
+   `Domain Admins`.
+4. Sign out and sign in as `edavis`: the same three connections, as edavis.
+   edavis isn't in `linux-admins` or `Domain Admins`, so there's no
+   Guacamole admin menu, no sudo on Xubuntu, and only a standard user's
+   rights on Windows. (rpatel, like jsmith, is an admin everywhere.)
 
 User passwords are in Secrets Manager as `<user>_ad_credentials_efs`:
 
 ```bash
-aws secretsmanager get-secret-value --secret-id rpatel_ad_credentials_efs \
+aws secretsmanager get-secret-value --secret-id edavis_ad_credentials_efs \
   --query SecretString --output text | jq -r .password
 ```
 
