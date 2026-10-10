@@ -31,6 +31,12 @@ if test -r ~/.profile; then
     . ~/.profile
 fi
 
+# XRDP starts Xorg with "-auth .Xauthority" but does not export XAUTHORITY.
+# Ordinary apps find ~/.Xauthority by default; snaps (chromium) run with a
+# redirected $HOME and do not, so X refuses them ("Authorization required").
+# An absolute XAUTHORITY lets snapd hand the cookie to the snap.
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+
 export DESKTOP_SESSION=xfce
 export XDG_SESSION_DESKTOP=xfce
 export XDG_CURRENT_DESKTOP=XFCE
@@ -66,13 +72,13 @@ RULES
 # systemd 258+ prints "OSC 3008" context escapes at every bash prompt
 # (/etc/profile.d/80-systemd-osc-context.sh). Guacamole's terminal does not
 # understand them and shows the raw text ("start=...;type=shell;cwd=...").
-# A dpkg diversion renames the file out of /etc/profile.d's *.sh glob and
-# keeps it renamed across systemd upgrades.
+# The symlink is re-created at EVERY BOOT by a tmpfiles.d rule
+# (/usr/lib/tmpfiles.d/20-systemd-osc-context.conf), so deleting or
+# diverting it does not last. Mask the rule with a same-named /etc entry
+# pointing at /dev/null, then remove the symlink once.
 echo "NOTE: [xrdp] disabling systemd's OSC 3008 prompt escapes"
-if [ -e /etc/profile.d/80-systemd-osc-context.sh ]; then
-  dpkg-divert --local --rename --divert /etc/profile.d/80-systemd-osc-context.sh.disabled \
-    --add /etc/profile.d/80-systemd-osc-context.sh
-fi
+ln -sf /dev/null /etc/tmpfiles.d/20-systemd-osc-context.conf
+rm -f /etc/profile.d/80-systemd-osc-context.sh
 
 systemctl enable xrdp
 

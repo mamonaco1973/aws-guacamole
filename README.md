@@ -144,7 +144,7 @@ aws secretsmanager get-secret-value --secret-id rpatel_ad_credentials_efs \
 | One user can't sign in | They must be in AD group `mcloud-users`. |
 | Windows (RDP) disconnects at once | The host is still joining the domain and rebooting (about 10 minutes after deploy). |
 | Xubuntu (SSH or RDP) rejects the password | The host hasn't finished its domain join; check `/root/userdata.log` over SSM. |
-| SSH prompt shows `start=...;type=shell;cwd=...` text | systemd 258+'s OSC 3008 prompt escapes, which Guacamole's terminal prints instead of hiding. The AMI diverts `/etc/profile.d/80-systemd-osc-context.sh` away (`02-packer/scripts/03-xrdp.sh`); on an older image, run `sudo dpkg-divert --local --rename --divert /etc/profile.d/80-systemd-osc-context.sh.disabled --add /etc/profile.d/80-systemd-osc-context.sh`. |
+| SSH prompt shows `start=...;type=shell;cwd=...` text | systemd 258+'s OSC 3008 prompt escapes, which Guacamole's terminal prints instead of hiding. A tmpfiles.d rule re-creates `/etc/profile.d/80-systemd-osc-context.sh` at every boot, so the AMI masks the rule (`02-packer/scripts/03-xrdp.sh`). On an older image: `sudo ln -sf /dev/null /etc/tmpfiles.d/20-systemd-osc-context.conf && sudo rm -f /etc/profile.d/80-systemd-osc-context.sh`. |
 | Xubuntu (RDP) connects, then closes | Check `/var/log/xrdp-sesman.log` on the host over SSM. The session runs `/etc/xrdp/startwm.sh`, which starts Xfce. |
 | Packer can't SSH to the build instance | The build runs in the public subnet and allows only your current public IP. Check that a VPN or proxy isn't changing it mid-build. |
 | Browser certificate warning | Expected: the certificate is self-signed. Import a real ACM certificate and point a DNS name at the ALB to remove it. |
