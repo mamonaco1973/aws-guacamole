@@ -30,7 +30,7 @@ resource "aws_instance" "guacamole" {
   }
 
   user_data = templatefile("./scripts/userdata_guacamole.sh", {
-    admin_secret = "admin_ad_credentials_efs"
+    admin_secret = "admin_ad_credentials_guac"
     guac_version = "1.6.0"
     dc_fqdn      = local.dc_fqdn
     base_dn      = local.base_dn

@@ -44,7 +44,7 @@ ok
 # ------------------------------------------------------------------------------
 # Sign in as an AD user and list the connections Guacamole grants
 # ------------------------------------------------------------------------------
-JSMITH="$(aws secretsmanager get-secret-value --secret-id jsmith_ad_credentials_efs \
+JSMITH="$(aws secretsmanager get-secret-value --secret-id jsmith_ad_credentials_guac \
   --query SecretString --output text | jq -r .password)"
 
 step "Sign-in as jsmith (LDAPS to AD)"
@@ -78,7 +78,7 @@ URL      : ${URL}
            choose Advanced > Proceed.
 Sign in  : jsmith / ${JSMITH}
            (any mcloud-users member; passwords in Secrets Manager
-           as <user>_ad_credentials_efs)
+           as <user>_ad_credentials_guac)
 Connect  : Windows (RDP), Xubuntu (RDP desktop) and Xubuntu (SSH),
            as the signed-in user.
            Windows needs ~10 minutes after deploy to join the

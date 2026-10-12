@@ -59,7 +59,7 @@ resource "aws_instance" "windows_ad_instance" {
   # Configures the instance to authenticate against the AD domain and
   # connects to supporting infrastructure for management workflows.
   user_data = templatefile("./scripts/userdata.ps1", {
-    admin_secret = "admin_ad_credentials_efs"
+    admin_secret = "admin_ad_credentials_guac"
     domain_fqdn  = var.dns_zone
   })
 

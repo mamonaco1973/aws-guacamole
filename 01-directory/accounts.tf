@@ -31,7 +31,7 @@ locals {
 }
 
 resource "aws_secretsmanager_secret" "admin_secret" {
-  name        = "admin_ad_credentials_efs"
+  name        = "admin_ad_credentials_guac"
   description = "AD Administrator Credentials"
 
   lifecycle {
@@ -94,7 +94,7 @@ locals {
 # Per-user Secrets Manager entries.
 resource "aws_secretsmanager_secret" "user_secret" {
   for_each    = local.ad_users
-  name        = "${each.key}_ad_credentials_efs"
+  name        = "${each.key}_ad_credentials_guac"
   description = "${each.value} AD credentials"
 
   lifecycle {

@@ -143,10 +143,10 @@ and reboot before RDP accepts domain logins.
    Guacamole admin menu, no sudo on Xubuntu, and only a standard user's
    rights on Windows. (rpatel, like jsmith, is an admin everywhere.)
 
-User passwords are in Secrets Manager as `<user>_ad_credentials_efs`:
+User passwords are in Secrets Manager as `<user>_ad_credentials_guac`:
 
 ```bash
-aws secretsmanager get-secret-value --secret-id edavis_ad_credentials_efs \
+aws secretsmanager get-secret-value --secret-id edavis_ad_credentials_guac \
   --query SecretString --output text | jq -r .password
 ```
 

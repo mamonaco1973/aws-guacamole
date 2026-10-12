@@ -57,7 +57,7 @@ resource "aws_instance" "xubuntu" {
   iam_instance_profile = aws_iam_instance_profile.ec2_secrets_profile.name
 
   user_data = templatefile("./scripts/userdata_xubuntu.sh", {
-    admin_secret = "admin_ad_credentials_efs"
+    admin_secret = "admin_ad_credentials_guac"
     domain_fqdn  = var.dns_zone
     hostname     = "xubuntu" # -> AD computer object name on join
   })
